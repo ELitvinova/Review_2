@@ -1,1 +1,2 @@
-# Review_2
+# LovelyDogBot
+Telegram bot, providing dog images.

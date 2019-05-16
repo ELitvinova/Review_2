@@ -1,53 +1,71 @@
 import requests
 import telebot
 from telebot import types
+from telebot import apihelper
+import time
 
 """
 This module provides telegram bot, sending images from Stanford Dogs Dataset,
 using Dogs API.
 """
 
+
+# initializing bot object with our telegram token
+with open('telegram.token') as token_file:
+    token = token_file.read()
+bot = telebot.TeleBot(token)
+
+
+apihelper.proxy = {'http' : 'http://176.107.133.176:8080'}
+
 text_messages = {
     'start':
-        u'Welcome! Please, ask me for some dog pictures, '
-        u'using command /dog. Or you can ask for /help',
+        'Welcome! Please, ask me for some dog pictures, '
+        'using command /dog. Or you can ask for /help',
     'help':
-        u'You can ask for a picture of random dog, using command /dog. '
-        u'If you want a picture of a special breed, you can use command /breed'
-        u' with the name of the breed right after it. \n\n'
-        u'Example: \n'
-        u'/breed shiba\n\n'
-        u'To get the list af all available breeds, '
-        u'use command /all',
+        'You can ask for a picture of random dog, using command /dog. '
+        'If you want a picture of a special breed, you can use command /breed'
+        ' with the name of the breed right after it. \n\n'
+        'Example: \n'
+        '/breed terrier\n\n'
+        'To get the list af all available breeds, '
+        'use command /all',
     '404':
-        u'Sorry, we cannot find it. Try something else.'
+        'Sorry, we cannot find it. Try something else.'
 }
+
 # list of all breeds in our dataset
 breeds_list = requests.get('https://dog.ceo/api/breeds/list/all').\
     json()['message']
 
 
 def prepare_list_message():
-    list_message = 'Here is the list of all available breeds:\n'
+    message = 'Here is the list of all available breeds:\n'
     for breed in breeds_list.keys():
-        list_message += '{}\n'.format(breed)
+        message += '{}\n'.format(breed)
         if len(breeds_list[breed]) > 0:
             for sub in breeds_list[breed]:
-                list_message += '   {} {}\n'.format(sub, breed)
-    return list_message
+                message += '   {} {}\n'.format(sub, breed)
+    return message
 
 
-if __name__ == '__main__':
-    with open('telegram.token') as token_file:
-        token = token_file.read()
-    bot = telebot.TeleBot(token)
+# string message with the list of all breeds in our dataset
+list_message = prepare_list_message()
 
 
-def check_error(chat_id, response):
+def check_error(message, response):
+    """
+    If everything is OK, returns False, otherwise returns True.
+    """
     if response.status_code == 200:
         return False
     if response.status_code == 404:
-        bot.send_message(chat_id, text_messages['404'])
+        bot.send_message(message.chat.id, text_messages['404'])
+    # logging
+    with open('log.txt', 'a') as log_f:
+        log_f.write('{} message: {}, code: {}\n'.
+                    format(time.strftime('%Y%m%d_%H%M%S'),
+                           message.text, response.status_code))
     return True
 
 
@@ -66,13 +84,17 @@ def get_random_dog(message):
     """
     This function provides an image of random dog from the dataset.
     """
+    # getting response from the dataset
     response = requests.get('https://dog.ceo/api/breeds/image/random')
-    print('received')
-    if check_error(message.chat.id, response):
+
+    # if any error occurs, it would be handled in check_error function
+    if check_error(message, response):
         return
 
+    # getting image from the response
     got_message = response.json()
     photo = got_message['message']
+    # sending image
     bot.send_photo(message.chat.id, photo)
 
 
@@ -82,7 +104,10 @@ def get_breeds_list(message):
     This function provides the list of all breeds
     and sub-breeds in our dataset.
     """
-    list_message = prepare_list_message()
+    # if this function is called for the first time, building the message
+    if list_message == "":
+        prepare_list_message()
+    # sending the message
     bot.send_message(message.chat.id, list_message)
 
 
@@ -94,26 +119,40 @@ def get_by_breed(message):
     in our dataset, we call function to choose it. If not, image of
     this breed is sent to the user.
     """
-    breed = message.text[7:].lower()
+    # getting breed from the message
+    breed = message.text.lower().split()
 
+    # if we cannot find breed in the message
+    if len(breed) != 2:
+        bot.send_message(message.chat.id,
+                         'You should use this command as in the example in /help')
+        return
+
+    breed = breed[1]
+
+    # if we do not have this bread in our dataset, we cannot send it
     if breed not in breeds_list:
         bot.send_message(message.chat.id, text_messages['404'])
         return
 
+    # if there are more than one sub-breed in this bread,
+    # we ask user to select which one he wants to receive
     if len(breeds_list[breed]) > 1:
         select_sub_breed(message, breed)
         return
 
+    # getting response from the dataset
     response = requests.get('https://dog.ceo/api/breed/{}/images/random'.
                             format(breed))
 
-    if check_error(message.chat.id, response):
+    # if any error occurs, it would be handled in check_error function
+    if check_error(message, response):
         return
 
+    # getting image from the response
     got_message = response.json()
     photo = got_message['message']
-    print(photo)
-
+    # sending image
     bot.send_photo(message.chat.id, photo)
 
 
@@ -127,14 +166,18 @@ def get_by_sub_breed(message):
         bot.send_message(message.chat.id, 'Ooops, you did something wrong...')
         return
 
+    # getting response from the dataset
     response = requests.get('https://dog.ceo/api/breed/{}-{}/images/random'.
                             format(breed, sub_breed))
 
-    if check_error(message.chat.id, response):
+    # if any error occurs, it would be handled in check_error function
+    if check_error(message, response):
         return
 
+    # getting image from the response
     got_message = response.json()
     photo = got_message['message']
+    # sending image
     bot.send_photo(message.chat.id, photo)
 
 
@@ -143,14 +186,19 @@ def select_sub_breed(message, breed):
     This function provides a keyboard to help user to enter the sub-breed name.
     Also it redirects his answer to function, sending image of this sub-breed.
     """
+    # creating special keyboard
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, row_width=2)
     buttons = []
 
+    # creating buttons
     for sub in breeds_list[breed]:
         buttons.append('{} {}'.format(sub, breed))
 
+    # adding buttons to the keyboard
     markup.add(*buttons)
+    # sending this keyboard as the answer to the incoming message
     msg = bot.reply_to(message, 'Select sub-breed', reply_markup=markup)
+    # setting function get_by_sub_breed as a handler for the user's response
     bot.register_next_step_handler(msg, get_by_sub_breed)
 
 

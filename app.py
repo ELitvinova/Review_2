@@ -16,7 +16,7 @@ with open('telegram.token') as token_file:
 bot = telebot.TeleBot(token)
 
 
-apihelper.proxy = {'http' : 'http://176.107.133.176:8080'}
+apihelper.proxy = {'http': 'http://176.107.133.176:8080'}
 
 text_messages = {
     'start':
@@ -40,12 +40,8 @@ breeds_list = requests.get('https://dog.ceo/api/breeds/list/all').\
 
 
 def prepare_list_message():
-    message = 'Here is the list of all available breeds:\n'
-    for breed in breeds_list.keys():
-        message += '{}\n'.format(breed)
-        if len(breeds_list[breed]) > 0:
-            for sub in breeds_list[breed]:
-                message += '   {} {}\n'.format(sub, breed)
+    message = 'Here is the list of all available breeds:\n    '
+    message += '\n    '.join(breeds_list.keys())
     return message
 
 
@@ -124,8 +120,9 @@ def get_by_breed(message):
 
     # if we cannot find breed in the message
     if len(breed) != 2:
-        bot.send_message(message.chat.id,
-                         'You should use this command as in the example in /help')
+        bot.send_message(
+            message.chat.id,
+            'You should use this command as in the example in /help')
         return
 
     breed = breed[1]

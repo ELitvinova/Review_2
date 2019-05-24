@@ -8,4 +8,4 @@ import app
 class TestPybot:
 
     def test_addition(self):
-        assert 4 == 2 + 1
+        assert 4 == 2 + 2

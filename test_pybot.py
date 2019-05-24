@@ -2,7 +2,7 @@
 Unit tests for the pybot
 """
 
-import app.py
+import app
 
 
 class TestPybot:
